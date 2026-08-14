@@ -36,6 +36,29 @@ MODEL_MAP = {
     "smart": _expand(os.environ.get("SMART_MODEL", "gpt-4o")),
     **ALIASES,
 }
+# ── Upstream headers passed back to the caller ────────────────────────────────────────────────
+# WHITELIST ONLY. Never forward content-length / content-encoding / transfer-encoding: the body
+# below is re-serialised by JSONResponse, so a copied length or encoding would contradict it and
+# corrupt the response. Everything here is metadata the caller cannot otherwise see, because a
+# JSONResponse returns the body alone.
+_PASSTHROUGH_HEADERS = (
+    "x-ratelimit-limit-requests", "x-ratelimit-limit-tokens",
+    "x-ratelimit-remaining-requests", "x-ratelimit-remaining-tokens",
+    "x-ratelimit-reset-requests", "x-ratelimit-reset-tokens",
+    "openai-processing-ms", "openai-version", "openai-organization",
+    "x-request-id", "retry-after",
+)
+
+
+def _passthrough(resp) -> dict:
+    """The whitelisted upstream headers, as a plain dict. Absent headers are simply omitted, so a
+    provider that sends none (OpenRouter sends fewer than OpenAI) yields {} and nothing changes."""
+    out = {}
+    for name in _PASSTHROUGH_HEADERS:
+        value = resp.headers.get(name)
+        if value is not None:
+            out[name] = str(value)
+    return out
 
 
 def _verify_key(request: Request):
@@ -97,9 +120,11 @@ async def chat_completions(request: Request):
         )
 
     if resp.status_code != 200:
-        raise HTTPException(status_code=resp.status_code, detail=resp.text)
+        raise HTTPException(status_code=resp.status_code, detail=resp.text,
+                            headers=_passthrough(resp))
 
-    return JSONResponse(content=resp.json())
+    return JSONResponse(content=resp.json(), headers=_passthrough(resp))
+
 
 
 @app.post("/v1/embeddings")
@@ -118,9 +143,11 @@ async def embeddings(request: Request):
             f"{OPENAI_BASE}/v1/embeddings",
             json=body,
             headers=headers,
-        )
+        )    if resp.status_code != 200:
+        raise HTTPException(status_code=resp.status_code, detail=resp.text,
+                            headers=_passthrough(resp))
 
-    if resp.status_code != 200:
-        raise HTTPException(status_code=resp.status_code, detail=resp.text)
+    return JSONResponse(content=resp.json(), headers=_passthrough(resp))
+
 
     return JSONResponse(content=resp.json())
