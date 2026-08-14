@@ -138,16 +138,16 @@ async def embeddings(request: Request):
         "Content-Type": "application/json",
     }
 
-    async with httpx.AsyncClient(timeout=60) as client:
+        async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(
             f"{OPENAI_BASE}/v1/embeddings",
             json=body,
             headers=headers,
-        )    if resp.status_code != 200:
+        )
+
+    if resp.status_code != 200:
         raise HTTPException(status_code=resp.status_code, detail=resp.text,
                             headers=_passthrough(resp))
 
     return JSONResponse(content=resp.json(), headers=_passthrough(resp))
 
-
-    return JSONResponse(content=resp.json())
