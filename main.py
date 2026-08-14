@@ -138,7 +138,7 @@ async def embeddings(request: Request):
         "Content-Type": "application/json",
     }
 
-        async with httpx.AsyncClient(timeout=60) as client:
+    async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(
             f"{OPENAI_BASE}/v1/embeddings",
             json=body,
